@@ -1,0 +1,36 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.egg-info/
+
+# 虚拟环境
+.venv/
+venv/
+env/
+
+# 环境变量
+.env
+.env.*
+
+# 日志
+logs/
+*.log
+
+# 数据生成产物（保留 mock 源数据）
+data/*.xlsx
+data/*.csv
+!data/mock/
+
+# 运行产物
+outputs/
+*.tmp
+*.temp
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
