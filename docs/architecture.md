@@ -50,6 +50,12 @@
   2. 只读/建议 = LOW = 自动放行；
   3. **失败默认拒绝**：任何异常 → 拒绝并升级人工；
   4. 安全**不依赖 LLM 自觉**，全部代码强制。
+- **参数名规范化**：`_normalize_params()` 把 LLM 可能输出的别名
+  （quantity/count→qty、money/price→amount、order_no→order_id）统一为标准名，
+  杜绝"参数名不一致导致校验失效"；关键参数缺失明确拒绝。
+- **库存闸门**（编排层 `agent._inventory_gate`）：补发动作生成后、进人工确认前，
+  用真实数据源校验门店可用库存，不足则拦截并标注 `inventory_blocked`，
+  避免"建议了却无法执行/无效补发"。
 - `approve/deny`：人工二次确认的批准/驳回，落审计。
 
 ### memory/ 记忆层

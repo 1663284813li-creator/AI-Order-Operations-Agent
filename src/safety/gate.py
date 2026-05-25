@@ -52,13 +52,46 @@ class SafetyGate:
     # ------------------------------------------------------------------
     # 参数校验
     # ------------------------------------------------------------------
+    @staticmethod
+    def _normalize_params(p: dict) -> dict:
+        """参数规范化：统一 LLM 可能输出的字段别名。
+
+        作用：即使 LLM 输出 quantity/count/money 等别名，安全闸门也能用标准
+        字段（qty/amount/order_id）做校验，避免"参数名不一致导致校验失效"。
+        """
+        if not isinstance(p, dict):
+            return {}
+        mapping = {
+            "quantity": "qty",
+            "count": "qty",
+            "num": "qty",
+            "number": "qty",
+            "money": "amount",
+            "price": "amount",
+            "refund_amount": "amount",
+            "total": "amount",
+            "orderid": "order_id",
+            "order_no": "order_id",
+            "orderno": "order_id",
+            "order": "order_id",
+            "product_code": "sku",
+            "store_name": "store",
+        }
+        out = dict(p)
+        for alias, canonical in mapping.items():
+            if alias in out and canonical not in out:
+                out[canonical] = out[alias]
+        return out
+
     def validate(self, action: Action) -> tuple[bool, str]:
         """参数合法性校验。失败默认拒绝。"""
-        p = action.params
+        p = self._normalize_params(action.params or {})
 
         # 退款金额
         if action.type == ActionType.REFUND:
             amount = p.get("amount")
+            if amount is None:
+                return False, "退款金额缺失"
             if not isinstance(amount, (int, float)) or isinstance(amount, bool):
                 return False, "退款金额格式错误"
             if amount <= 0:
@@ -69,6 +102,8 @@ class SafetyGate:
         # 补发数量
         if action.type == ActionType.REISSUE:
             qty = p.get("qty")
+            if qty is None:
+                return False, "补发数量缺失"
             if not isinstance(qty, (int, float)) or isinstance(qty, bool):
                 return False, "补发数量格式错误"
             if qty <= 0:

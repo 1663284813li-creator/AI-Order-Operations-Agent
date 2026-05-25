@@ -7,14 +7,17 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Optional
 
+# 项目根目录（先于 load_dotenv 定义，用于定位 .env）
+ROOT = Path(__file__).resolve().parent.parent
+
+# 显式加载项目根目录的 .env（不依赖当前工作目录）
+# override=True：.env 里的值优先于系统环境变量
 try:
     from dotenv import load_dotenv
 
-    load_dotenv()
+    load_dotenv(ROOT / ".env", override=True)
 except ImportError:  # 未装 python-dotenv 时静默降级
     pass
-
-ROOT = Path(__file__).resolve().parent.parent
 
 
 @dataclass

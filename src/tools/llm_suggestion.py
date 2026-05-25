@@ -42,10 +42,13 @@ JSON 结构：
 - modify_order 修改订单（敏感，系统会自动要求人工确认）
 - escalate     升级人工
 
-规则：
-- 敏感动作（refund/reissue/modify_order）不要执行理由，系统会自动拦截并转人工。
+参数规则：
+- 金额字段名用 amount（单位元）、数量字段名用 qty、订单号用 order_id。
+- **reissue（补发）必须带 sku 字段**（商品编码，从订单明细里选），可选带 store（门店）；
+  若订单含多个商品而诉求不明确，宁可 escalation_required=true，也不要乱猜 sku。
+- 敏感动作（refund/reissue/modify_order）不要写执行理由，系统会自动拦截并转人工。
 - 信息不足、诉求超规则、客户情绪激烈时，escalation_required 设为 true。
-- params 里的金额/数量必须是数字，金额单位元。
+- params 里的金额/数量必须是数字。
 """
 
 
@@ -86,6 +89,12 @@ def _validate_actions(raw_actions: list) -> list[Action]:
         if not isinstance(params, dict):
             params = {}
 
+        # 源头参数规范化：quantity/count -> qty, money -> amount 等
+        # 与 SafetyGate._normalize_params 一致，保证动作参数名统一、校验不失效
+        from src.safety.gate import SafetyGate
+
+        params = SafetyGate._normalize_params(params)
+
         actions.append(
             Action(
                 type=atype,
@@ -101,8 +110,23 @@ def _validate_actions(raw_actions: list) -> list[Action]:
 def generate(ticket: Ticket, llm=None) -> Optional[Suggestion]:
     """用 LLM 生成处理建议；失败/非法时返回 None（由调用方回退）。"""
     from src.models.client import LLMClient
+    from src.data_source import data_source
 
     llm = llm or LLMClient()
+
+    # 查询关联订单明细，注入 prompt，让 LLM 能依据真实商品/门店精确决策
+    order_detail = ""
+    order = data_source.get_order(ticket.related_order_id) if ticket.related_order_id else None
+    if order:
+        lines = "\n".join(
+            f"  - SKU {it['sku']} | {it['name']} | 规格 {it['spec']} | 单价 {it['price']} | 数量 {it['qty']}"
+            for it in order.items
+        )
+        order_detail = (
+            f"【订单明细】订单 {order.order_id}，门店 {order.store}，状态 {order.status}，金额 {order.amount}\n"
+            f"{lines}\n"
+        )
+
     user_prompt = (
         f"【工单信息】\n"
         f"- 工单号: {ticket.ticket_id}\n"
@@ -111,7 +135,8 @@ def generate(ticket: Ticket, llm=None) -> Optional[Suggestion]:
         f"- 问题类型: {ticket.issue_type}\n"
         f"- 关联订单: {ticket.related_order_id or '未知'}\n"
         f"- 问题描述: {ticket.description}\n\n"
-        f"请给出处理建议（JSON）。"
+        f"{order_detail}"
+        f"请给出处理建议（JSON）。补发(reissue)必须带 sku（从订单明细里选）。"
     )
 
     try:

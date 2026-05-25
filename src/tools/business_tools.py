@@ -83,9 +83,9 @@ def create_suggestion(ticket: Ticket, reasoning: str, use_llm: bool = False,
     """
     if use_llm:
         try:
-            from src.tools.llm_suggestion import llm_suggestion
+            from src.tools.llm_suggestion import generate as llm_suggestion
 
-            sug = llm_suggestion.generate(ticket, llm=llm)
+            sug = llm_suggestion(ticket, llm=llm)
             if sug is not None:
                 return sug
             log.warning("LLM 建议生成失败，回退规则版")

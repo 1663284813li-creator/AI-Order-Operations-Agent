@@ -86,3 +86,35 @@ def test_readonly_query_allowed_automatic(gate):
     ok, req, _ = gate.check(act, "T1")
     assert ok is True
     assert req is None
+
+
+# ----------------------------------------------------------------------
+# 参数名规范化（LLM 别名攻击防护）
+# ----------------------------------------------------------------------
+def test_quantity_alias_normalized(gate):
+    """LLM 输出 quantity 别名 -> 应被规范化并拦截超限。"""
+    act = Action(ActionType.REISSUE, {"quantity": 9999, "order_id": "PO1"}, RiskLevel.HIGH)
+    ok, _, msg = gate.check(act, "T1")
+    assert ok is False
+    assert "上限" in msg
+
+
+def test_count_alias_normalized(gate):
+    act = Action(ActionType.REISSUE, {"count": 9999, "order_id": "PO1"}, RiskLevel.HIGH)
+    ok, _, msg = gate.check(act, "T1")
+    assert ok is False
+
+
+def test_money_alias_normalized(gate):
+    """money/price 别名 -> 规范化到 amount 并拦截超限退款。"""
+    act = Action(ActionType.REFUND, {"money": 99999, "order_id": "PO1"}, RiskLevel.HIGH)
+    ok, _, _ = gate.check(act, "T1")
+    assert ok is False
+
+
+def test_missing_critical_param_rejected(gate):
+    """关键参数缺失 -> 明确拒绝（不再误报格式错误）。"""
+    act = Action(ActionType.REFUND, {"note": "无金额"}, RiskLevel.HIGH)
+    ok, _, msg = gate.check(act, "T1")
+    assert ok is False
+    assert "缺失" in msg

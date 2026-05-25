@@ -192,9 +192,19 @@ class TicketAgent:
         sug = create_suggestion(ticket, reasoning=f"用户反映: {user_input[:60]}",
                                 use_llm=self.use_llm, llm=self.llm)
 
-        # 过安全闸门：敏感动作全部转人工确认
+        # 过安全闸门：敏感动作全部转人工确认；补发额外过库存闸门
         approvals = []
         for act in sug.actions:
+            # 库存闸门：补发前强制校验门店库存（缺货直接拦截，避免无效补发）
+            if act.type == ActionType.REISSUE:
+                ok_inv, inv_msg = self._inventory_gate(act, order)
+                if not ok_inv:
+                    log.warning("库存闸门拦截补发: %s (ticket=%s)", inv_msg, ticket.ticket_id)
+                    # 库存不足 -> 动作作废，记录为"库存不足待人工决策"
+                    act.params["inventory_blocked"] = True
+                    act.params["inventory_note"] = inv_msg
+                    act.requires_approval = True
+
             ok, req, msg = safety_gate.check(act, ticket.ticket_id)
             if req:
                 approvals.append({"id": id(req), "action": act.type.value,
@@ -214,6 +224,47 @@ class TicketAgent:
             ],
             "pending_approvals": approvals,
         }
+
+
+    def _inventory_gate(self, act: Action, order) -> tuple[bool, str]:
+        """库存闸门：补发前强制校验门店可用库存。
+
+        返回 (是否通过, 说明)。缺货/库存不足 -> 拦截并返回 false。
+        若无法唯一确定 sku（订单多 SKU 或订单不存在），则保守地转人工决策，
+        不擅自放行补发。
+        """
+        from src.data_source import data_source
+        from src.tools.business_tools import check_inventory
+
+        params = act.params or {}
+        order_id = params.get("order_id") or (order.order_id if order else None)
+        qty = params.get("qty")
+        order = order or (data_source.get_order(order_id) if order_id else None)
+
+        # 无法确定数量/订单：保守拦截，转人工决策
+        if not isinstance(qty, (int, float)) or qty <= 0:
+            return False, "补发数量不明确，需人工核对"
+        if order is None:
+            return False, f"订单 {order_id} 无法定位，需人工核对"
+        if not order.items:
+            return False, "订单无商品明细，需人工核对"
+
+        # 确定 sku：优先用动作里的 sku；否则订单单 SKU 就用它；多 SKU 则转人工
+        sku = params.get("sku")
+        if not sku:
+            unique_skus = {it["sku"] for it in order.items if it.get("sku")}
+            if len(unique_skus) == 1:
+                sku = unique_skus.pop()
+            else:
+                return False, "订单含多个商品，无法自动判断补发 SKU，需人工核对"
+
+        inv = check_inventory(order.store, sku)
+        if not inv.get("success"):
+            return False, f"门店 {order.store} 无商品 {sku} 库存记录，需人工核对"
+        available = inv.get("available_qty", 0)
+        if available < qty:
+            return False, f"门店 {order.store} 商品 {sku} 可用库存 {available} 不足（需 {qty}），拦截补发"
+        return True, "ok"
 
 
 # 便捷函数
