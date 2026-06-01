@@ -29,6 +29,30 @@ class LLMClient:
         self.base_url = base_url or settings.model_base_url
         self.model = model or settings.model_name
         self.temperature = temperature if temperature != 0 else settings.model_temperature
+        # token 用量统计（评测/成本指标用）
+        self.total_calls = 0
+        self.total_prompt_tokens = 0
+        self.total_completion_tokens = 0
+
+    def usage_stats(self) -> dict:
+        """返回累计 token 用量统计。"""
+        return {
+            "calls": self.total_calls,
+            "prompt_tokens": self.total_prompt_tokens,
+            "completion_tokens": self.total_completion_tokens,
+            "total_tokens": self.total_prompt_tokens + self.total_completion_tokens,
+        }
+
+    def _record_usage(self, resp) -> None:
+        """从响应里提取 usage 并累计（平台可能不返回 usage，容错）。"""
+        try:
+            u = resp.usage
+            if u is not None:
+                self.total_calls += 1
+                self.total_prompt_tokens += u.prompt_tokens or 0
+                self.total_completion_tokens += u.completion_tokens or 0
+        except Exception:
+            self.total_calls += 1  # 无 usage 也计一次调用
 
     def _client(self):
         """惰性创建 OpenAI 兼容客户端。"""
@@ -49,6 +73,7 @@ class LLMClient:
         if tools:
             kwargs["tools"] = tools
         resp = client.chat.completions.create(**kwargs)
+        self._record_usage(resp)
         return resp.choices[0].message.content or ""
 
     def chat_with_tools(self, messages: list[dict], tools: list[dict]) -> tuple[Optional[str], Optional[dict]]:
@@ -65,6 +90,7 @@ class LLMClient:
             temperature=self.temperature,
             tools=tools,
         )
+        self._record_usage(resp)
         msg = resp.choices[0].message
         tool_call = None
         if msg.tool_calls:
