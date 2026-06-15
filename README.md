@@ -74,8 +74,21 @@ copy .env.example .env   # 填入 MODEL_API_KEY / MODEL_BASE_URL / MODEL_NAME
 
 ## 里程碑（见 docs/architecture.md 与立项方案）
 
-- W1: MVP 跑通（工具层 + 工单接入 + 基本流程）✅ 已就绪
-- W2: 安全闸门（敏感动作 + 二次确认 + 参数校验）
-- W3: 记忆 + 评测（画像 + 评测集 + 指标面板）
-- W4: 收口（审计面板 + 演示闭环 + 文档）
+- W1: MVP 跑通（工具层 + 工单接入 + 基本流程）✅
+- W2: 安全闸门（敏感动作 + 二次确认 + 参数校验 + 参数名规范化 + 库存闸门）✅
+- W3: 记忆 + 评测（画像 + 会话记忆 + 评测集 + 量化报告）✅
+- W4: 收口（人工确认控制台 + 审计留痕 + 演示闭环 + 文档）✅（进行中）
+
+## 脚本清单
+
+| 脚本 | 用途 |
+|---|---|
+| `scripts/run.py` | 交互入口（mock / `--llm` 真实模式） |
+| `scripts/approval_console.py` | **人工确认控制台**：查看待确认 → 批准/驳回 → 审计导出（`--demo` 自动演示） |
+| `scripts/run_evaluation.py` | 真实 LLM 端到端评测（`--fast` 快速模式），产出量化报告到 `outputs/` |
+| `scripts/demo_llm.py` | 真实 LLM 全链路演示（查单/物流/库存 + 建议 + 闸门） |
+| `scripts/demo_security.py` | 安全加固演示（参数别名攻击 + 库存闸门） |
+| `scripts/demo_memory.py` | 记忆演示（画像增量 + 跨客户隔离） |
+| `scripts/smoke_test.py` | 冒烟测试（数据源/工具/Agent/LLM 解析器） |
+| `scripts/check_llm.py` / `list_models.py` | LLM 连通性 / 平台模型列表 |
 

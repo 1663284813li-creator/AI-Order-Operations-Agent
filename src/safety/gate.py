@@ -11,6 +11,7 @@
 """
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass, field
 from typing import Optional
 
@@ -202,6 +203,40 @@ class SafetyGate:
     # ------------------------------------------------------------------
     def audit_log(self) -> list[AuditRecord]:
         return list(self._audit)
+
+    # ------------------------------------------------------------------
+    # 序列化（供界面/导出/评测使用）
+    # ------------------------------------------------------------------
+    def pending_dicts(self) -> list[dict]:
+        """待确认请求 -> 可序列化 dict（含稳定编号）。"""
+        return [
+            {
+                "id": id(r),
+                "action": r.action.type.value,
+                "params": r.action.params,
+                "risk": r.action.risk.value,
+                "ticket_id": r.ticket_id,
+                "reason": r.reason,
+                "status": r.status,
+            }
+            for r in self._pending
+            if r.status == "pending"
+        ]
+
+    def audit_dicts(self) -> list[dict]:
+        """审计留痕 -> 可序列化 dict 列表（导出 JSON/CSV 用）。"""
+        return [
+            {
+                "ticket_id": r.ticket_id,
+                "action": r.action.type.value,
+                "params": json.dumps(r.action.params, ensure_ascii=False),
+                "operator": r.operator,
+                "decision": r.decision,
+                "timestamp": r.timestamp,
+                "note": r.note,
+            }
+            for r in self._audit
+        ]
 
 
 def _now() -> str:
